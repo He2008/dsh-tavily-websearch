@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Tavily-Websuche",
+    "description": "Stellt web_search über Tavily bereit, schlüssellos oder mit einem Tavily-API-Schlüssel."
+  }
+}

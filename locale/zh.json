@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Tavily 网页搜索",
+    "description": "通过 Tavily 为 web_search 提供搜索，默认免密钥，也可配置 Tavily API Key。"
+  }
+}

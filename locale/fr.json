@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Recherche web Tavily",
+    "description": "Fournit web_search via Tavily, avec accès sans clé ou avec une clé API Tavily."
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "dsh-tavily-websearch",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Tavily-backed search provider for the DeepSeek Harness web_search tool.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/He2008/dsh-tavily-websearch.git"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "tavily",
+    "web-search"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

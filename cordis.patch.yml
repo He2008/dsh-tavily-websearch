@@ -1,0 +1,16 @@
+# Select Tavily for the `web_search` tool and register its provider.
+#
+# The `web` override replaces that row's complete config, so both provider ids
+# are spelled out. Set `searchProvider` back to `deepseek-search-api` (or delete
+# this override) to return to the shipped provider.
+- id: web
+  config:
+    searchProvider: tavily
+    fetchProvider: http
+
+- insert:
+    - id: tavily-websearch
+      name: 'dsh-tavily-websearch'
+      config:
+        # Read the key from this environment variable; omit it to use keyless mode.
+        apiKeyEnv: TAVILY_API_KEY
