@@ -31,43 +31,70 @@ patch layer can override either selection.
 - `answer` maps to the optional provider answer when `includeAnswer: true`.
 - Without a key the request sends `X-Tavily-Access-Mode: keyless` (free,
   rate-limited). With a key it sends `Authorization: Bearer <key>`.
-- A literal `apiKey` wins over the `apiKeyEnv` environment variable, which wins
-  over keyless mode.
+- Searches rotate across the configured keys. A `401`/`403` key is skipped for
+  the rest of the process; a `429`/`432`/`433` key is skipped for the rest of
+  that search and tried again later. When every key fails, keyless mode serves
+  the search if `keylessFallback` is enabled.
 - Aborts surface as `WEB_ABORTED`; HTTP and transport failures surface as
   `WEB_PROVIDER_ERROR` with Tavily's own message plus a recovery hint.
 
 ## Authentication
 
 Tavily works out of the box: with no key the provider uses Tavily's keyless
-access mode (free, rate-limited). To use account limits and billing, provide a
-key from https://app.tavily.com in either way:
+access mode (free, rate-limited). To use account limits and billing, add one or
+more keys from https://app.tavily.com.
+
+### Settings card
+
+Plugins → **Tavily web search** → the card under the bundle description manages
+up to eight keys (references `TAVILY_API_KEY` and `TAVILY_API_KEY_2` …
+`TAVILY_API_KEY_8`). Keys are written to the DSH credential store through the
+`credentials` Remote namespace:
+
+- The card shows only whether a key is configured and which layer supplies it;
+  the credential API never returns stored values.
+- **Replace** overwrites one slot, **Remove** clears a stored key. A key that
+  comes from the environment is read-only in the card — change or unset the
+  variable instead.
+- A saved key reaches the next search without restarting the Host.
+
+### Environment
+
+The same references resolve from the environment, so exporting them is
+equivalent to using the card:
 
 ```sh
-# Preferred: keep the secret out of configuration files.
-export TAVILY_API_KEY=tvly-...
+export TAVILY_API_KEY=tvly-first
+export TAVILY_API_KEY_2=tvly-second
 ```
+
+A running Host re-resolves references per search, so a variable exported before
+the Host started is picked up without a plugin restart.
+
+### Configuration
+
+For a deployment that owns its composition, literal keys (discouraged: they sit
+in the profile file) and the base reference are configurable:
 
 ```yaml
-# Bundle row config, for a deployment that owns this file.
 - id: tavily-websearch
   config:
-    apiKeyEnv: TAVILY_API_KEY
-# or, when the environment cannot carry it:
-#   apiKey: tvly-...
+    apiKeyEnv: TAVILY_API_KEY     # base reference; suffixes _2 … _8 follow
+#   apiKeys: [tvly-...]           # literal keys, tried before references
+#   keylessFallback: true         # search anonymously when every key fails
 ```
 
-The running Host reads the environment variable per search, but a Host started
-before the variable was set must restart to see it. Never commit a literal key;
-if one leaks, rotate it in the Tavily dashboard.
+Never commit a literal key; if one leaks, rotate it in the Tavily dashboard.
 
-## Configuration
 
-Row config (in `cordis.patch.yml`):
+## Row config reference
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `apiKey` | — | Literal key; prefer `apiKeyEnv` so no secret enters configuration files. |
-| `apiKeyEnv` | `TAVILY_API_KEY` | Environment variable read for the key. |
+| `apiKey` | — | One literal key; prefer the card or `apiKeyEnv` so no secret enters configuration files. |
+| `apiKeys` | `[]` | Literal keys tried before references; discouraged. |
+| `apiKeyEnv` | `TAVILY_API_KEY` | Base reference; `_2` … `_8` are read as the remaining slots. |
+| `keylessFallback` | `true` | Use keyless mode when every configured key fails. |
 | `baseURL` | `https://api.tavily.com` | API origin; `/search` is appended when absent. |
 | `searchDepth` | `basic` | `basic`, `advanced`, `fast`, or `ultra-fast`. |
 | `includeAnswer` | `false` | Ask Tavily for an LLM-generated answer. |
@@ -87,11 +114,13 @@ search settings page read these without activating the plugin.
 
 ```sh
 node --check index.js
-node tests/smoke.mjs          # mapping check against a stub response
+node --check client.js
+node tests/smoke.mjs          # mapping, rotation, failover, and fallback against stubs
 node tests/smoke.mjs --live   # one real keyless search
 ```
 
-After installation, call the `web_search` tool and confirm results come back
+After installation, open Plugins → Tavily web search: the key card should list
+the configured slots. Call the `web_search` tool and confirm results come back
 with Tavily sources.
 
 ## Why a bundle rather than a workspace package
