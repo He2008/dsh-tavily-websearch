@@ -51,11 +51,12 @@ up to eight keys (references `TAVILY_API_KEY` and `TAVILY_API_KEY_2` …
 `TAVILY_API_KEY_8`). Keys are written to the DSH credential store through the
 `credentials` Remote namespace:
 
-- The card shows only whether a key is configured and which layer supplies it;
-  the credential API never returns stored values.
-- **Replace** overwrites one slot, **Remove** clears a stored key. A key that
-  comes from the environment is read-only in the card — change or unset the
-  variable instead.
+- The card lists all eight slots with their reference, status (**Configured**
+  or **Not configured**), and supplying layer; the credential API never returns
+  stored values.
+- **Add** fills a free slot, **Replace** overwrites one, and **Delete** clears a
+  stored key. A key that comes from the environment is read-only here — delete
+  or change the variable instead.
 - A saved key reaches the next search without restarting the Host.
 
 ### Environment
