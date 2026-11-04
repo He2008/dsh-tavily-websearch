@@ -51,13 +51,32 @@ up to eight keys (references `TAVILY_API_KEY` and `TAVILY_API_KEY_2` …
 `TAVILY_API_KEY_8`). Keys are written to the DSH credential store through the
 `credentials` Remote namespace:
 
-- The card lists all eight slots with their reference, status (**Configured**
-  or **Not configured**), and supplying layer; the credential API never returns
-  stored values.
+- The card lists all eight slots with their reference, configuration state,
+  supplying layer, and last network outcome (see below); the credential API
+  never returns stored values.
 - **Add** fills a free slot, **Replace** overwrites one, and **Delete** clears a
   stored key. A key that comes from the environment is read-only here — delete
   or change the variable instead.
-- A saved key reaches the next search without restarting the Host.
+- A saved key reaches the next search without restarting the Host. The key field
+  is a masked text field, not a password input, so browser password managers do
+  not offer to autofill or save it.
+
+### Runtime key status
+
+The provider records each reference's last attempt in memory and serves it on
+the loopback route `/_dsh/tavily-websearch/status`; the card polls that route
+every five seconds while it is open. The route carries no key values.
+
+| Status | Meaning |
+| --- | --- |
+| **Usable** | The last search with this key succeeded. |
+| **Rejected** | Tavily returned 401/403; the key is skipped for the rest of the process. |
+| **Rate-limited** | Tavily returned 429/432/433; the key is retried on a later search. |
+| **Error** | Another HTTP or transport failure; it is not a key problem. |
+| **Not used yet** | No search has used this key since the Host started, or the key was just replaced. |
+
+Status resets when the reference's value changes and when the Host restarts;
+when the route is unreachable the card says so and omits the runtime badge.
 
 ### Environment
 

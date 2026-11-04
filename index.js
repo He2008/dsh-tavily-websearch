@@ -17,6 +17,9 @@ export const inject = ['web']
 /** Registry id that `web.searchProvider` selects. */
 const PROVIDER_ID = 'tavily'
 
+/** Loopback route the settings card polls for runtime key health. */
+const STATUS_PATH = '/_dsh/tavily-websearch/status'
+
 /** Tavily's public API origin; `/search` is appended. */
 const DEFAULT_BASE_URL = 'https://api.tavily.com'
 
@@ -206,28 +209,31 @@ function failureMessage(status, text, payload, retryAfter) {
  * a key saved from the settings card reaches the next search without a restart.
  * @param {object} ctx - plugin context; the optional credentials service supplies stored and ambient values.
  * @param {object} options - resolved provider options.
- * @returns {Promise<string[]>} distinct non-empty keys in preference order.
+ * @returns {Promise<Array<{ value: string, reference: string }>>} distinct non-empty keys in preference order, each with the reference its status is reported under.
  */
 async function resolveKeys(ctx, options) {
-  const keys = []
-  const add = (value) => {
+  const entries = []
+  const seen = new Set()
+  const add = (value, reference) => {
     if (typeof value !== 'string') return
     const trimmed = value.trim()
-    if (trimmed.length > 0 && !keys.includes(trimmed)) keys.push(trimmed)
+    if (trimmed.length === 0 || seen.has(trimmed)) return
+    seen.add(trimmed)
+    entries.push({ value: trimmed, reference })
   }
-  add(options.apiKey)
-  for (const key of options.apiKeys) add(key)
+  add(options.apiKey, 'apiKey')
+  options.apiKeys.forEach((key, index) => add(key, `apiKeys[${index}]`))
 
   const credentials = typeof ctx.get === 'function' ? ctx.get('credentials') : undefined
   const resolved = await Promise.all(options.keyRefs.map(async (reference) => {
     if (credentials !== undefined) {
       const credential = await credentials.resolve(reference)
-      if (credential !== undefined) return credential.value
+      if (credential !== undefined) return { reference, value: credential.value }
     }
-    return process.env[reference]
+    return { reference, value: process.env[reference] }
   }))
-  for (const value of resolved) add(value)
-  return keys
+  for (const entry of resolved) add(entry.value, entry.reference)
+  return entries
 }
 
 /**
@@ -344,28 +350,40 @@ function everyKeyFailed(failures) {
  * Run one search across the configured keys, then the keyless fallback.
  * @param {object} ctx - plugin context supplying the credentials service.
  * @param {object} options - resolved provider options.
- * @param {{ cursor: number, dead: Set<string> }} ring - rotation cursor and keys rejected with 401/403.
+ * @param {{ cursor: number, dead: Set<string>, status: Map<string, { state: string, at: string, httpStatus?: number }> }} ring - rotation cursor, keys rejected with 401/403, and the per-reference runtime status shown by the settings card.
  * @param {{ query: string, maxResults?: number }} request - the seam's search request.
  * @param {AbortSignal | undefined} signal - cancellation forwarded to the tool call.
  * @param {(message: string) => void} warn - deployment log for a keyless fallback after key failures.
  * @returns {Promise<{ content?: string, sources: Array<object>, truncated: boolean }>} normalized search outcome.
  */
 async function searchTavily(ctx, options, ring, request, signal, warn) {
-  const keys = await resolveKeys(ctx, options)
-  const usable = keys.filter(key => !ring.dead.has(key))
+  const entries = await resolveKeys(ctx, options)
+  const usable = entries.filter(entry => !ring.dead.has(entry.value))
   const failures = []
+  const record = (reference, state, httpStatus) => {
+    ring.status.set(reference, {
+      state,
+      at: new Date().toISOString(),
+      ...httpStatus === undefined ? {} : { httpStatus },
+    })
+  }
 
-  for (const [position, key] of rotated(usable, ring.cursor).entries()) {
+  for (const [position, entry] of rotated(usable, ring.cursor).entries()) {
     if (signal?.aborted === true) throw webError('Tavily search was cancelled', 'WEB_ABORTED')
     try {
-      const result = await requestTavily(options, request, signal, key)
+      const result = await requestTavily(options, request, signal, entry.value)
+      record(entry.reference, 'ok')
       ring.cursor = usable.length === 0 ? 0 : (ring.cursor + position + 1) % usable.length
       return result
     } catch (error) {
       if (error.code === 'WEB_ABORTED') throw error
-      if (!isKeyFailure(error)) throw error
+      if (!isKeyFailure(error)) {
+        record(entry.reference, 'error', error.status)
+        throw error
+      }
+      record(entry.reference, error.status === 401 || error.status === 403 ? 'invalid' : 'rate_limited', error.status)
       failures.push(error)
-      if (error.status === 401 || error.status === 403) ring.dead.add(key)
+      if (error.status === 401 || error.status === 403) ring.dead.add(entry.value)
     }
   }
 
@@ -382,7 +400,7 @@ async function searchTavily(ctx, options, ring, request, signal, warn) {
 
   if (failures.length === 0) {
     throw webError(
-      keys.length > 0
+      entries.length > 0
         ? 'every configured Tavily API key was rejected earlier; add a valid key, or enable keyless fallback'
         : 'no Tavily API key is configured and keyless fallback is disabled',
       'WEB_PROVIDER_ERROR',
@@ -398,7 +416,7 @@ async function searchTavily(ctx, options, ring, request, signal, warn) {
  */
 export function apply(ctx, config) {
   const options = resolveOptions(config)
-  const ring = { cursor: 0, dead: new Set() }
+  const ring = { cursor: 0, dead: new Set(), status: new Map() }
   const warn = (message) => { try { ctx.logger?.warn?.(message) } catch (_loggingFailure) { /* logging must not fail a search */ } }
   ctx.web.registerSearchProvider({
     id: PROVIDER_ID,
@@ -408,4 +426,24 @@ export function apply(ctx, config) {
     available: () => true,
     search: (request, signal) => searchTavily(ctx, options, ring, request, signal, warn),
   })
+
+  // The card reads runtime key health from this loopback route. It carries no
+  // key values, only reference names and the last attempt's outcome.
+  const server = typeof ctx.get === 'function' ? ctx.get('webServer') : undefined
+  if (server !== undefined) {
+    ctx.effect(() => server.register({
+      kind: 'exact',
+      path: STATUS_PATH,
+      resource: () => new Response(JSON.stringify({
+        generatedAt: new Date().toISOString(),
+        keys: Object.fromEntries(ring.status),
+      }), {
+        headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+      }),
+    }), 'tavily-websearch: key status route')
+  }
+  if (typeof ctx.on === 'function') {
+    // A replaced key starts unverified rather than inheriting the old key's health.
+    ctx.on('credentials/reference-updated', (reference) => { ring.status.delete(reference) })
+  }
 }

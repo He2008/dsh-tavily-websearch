@@ -12,8 +12,26 @@ import { apply } from '../index.js'
 function registerProvider(config = {}, environment = {}) {
   let provider
   const warnings = []
+  const routes = []
+  const listeners = new Map()
+  const webServer = {
+    register(route) {
+      routes.push(route)
+      return () => { routes.splice(routes.indexOf(route), 1) }
+    },
+  }
   const ctx = {
-    get: (name) => name === 'credentials' ? environment.credentials : undefined,
+    get: (name) => name === 'credentials'
+      ? environment.credentials
+      : name === 'webServer' ? webServer : undefined,
+    on: (event, listener) => {
+      listeners.set(event, listener)
+      return () => { listeners.delete(event) }
+    },
+    effect: (callback) => {
+      const dispose = callback()
+      return () => { if (typeof dispose === 'function') dispose() }
+    },
     logger: { warn: (message) => { warnings.push(message) } },
     web: {
       registerSearchProvider(candidate) {
@@ -23,7 +41,7 @@ function registerProvider(config = {}, environment = {}) {
   }
   apply(ctx, config)
   assert.ok(provider, 'apply must register a search provider')
-  return { provider, warnings }
+  return { provider, warnings, routes, listeners }
 }
 
 /** Credential service stub returning the given values by reference. */
@@ -159,12 +177,14 @@ await withStubFetch(async (_url, init) => {
   await storedProvider.search({ query: 'q' })
 })
 
-// A rate-limited key is skipped and the search continues with the next key.
+// A rate-limited key is skipped and the search continues with the next key;
+// the loopback status route reports each reference's last outcome.
 {
   const calls = []
-  const rotating = registerProvider({}, {
+  const registration = registerProvider({}, {
     credentials: credentialsOf({ TAVILY_API_KEY: 'key-rate', TAVILY_API_KEY_2: 'key-ok' }),
-  }).provider
+  })
+  const rotating = registration.provider
   await withStubFetch(async (_url, init) => {
     const key = requestKey(init)
     calls.push(key)
@@ -176,6 +196,21 @@ await withStubFetch(async (_url, init) => {
     assert.equal(result.sources[0].url, 'https://example.com/next')
   })
   assert.deepEqual(calls, ['key-rate', 'key-ok'])
+
+  assert.equal(registration.routes.length, 1)
+  const route = registration.routes[0]
+  assert.equal(route.kind, 'exact')
+  assert.equal(route.path, '/_dsh/tavily-websearch/status')
+  const payload = await route.resource().json()
+  assert.equal(payload.keys.TAVILY_API_KEY.state, 'rate_limited')
+  assert.equal(payload.keys.TAVILY_API_KEY.httpStatus, 429)
+  assert.equal(payload.keys.TAVILY_API_KEY_2.state, 'ok')
+
+  // A replaced key is unverified until it is used again.
+  const onReferenceUpdated = registration.listeners.get('credentials/reference-updated')
+  onReferenceUpdated('TAVILY_API_KEY_2')
+  const cleared = await route.resource().json()
+  assert.equal(cleared.keys.TAVILY_API_KEY_2, undefined)
 }
 
 // A rejected key (401) is remembered and not retried on the next search.
