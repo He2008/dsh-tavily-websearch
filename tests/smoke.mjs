@@ -50,6 +50,9 @@ function credentialsOf(values) {
     resolve: async (reference) => values[reference] === undefined
       ? undefined
       : { value: values[reference], source: 'file' },
+    describe: async (reference) => values[reference] === undefined
+      ? { configured: false, writable: true }
+      : { configured: true, source: 'file', writable: true },
   }
 }
 
@@ -201,7 +204,7 @@ await withStubFetch(async (_url, init) => {
   const route = registration.routes[0]
   assert.equal(route.kind, 'exact')
   assert.equal(route.path, '/_dsh/tavily-websearch/status')
-  const payload = await route.resource().json()
+  const payload = await (await route.resource()).json()
   assert.equal(payload.keys.TAVILY_API_KEY.state, 'rate_limited')
   assert.equal(payload.keys.TAVILY_API_KEY.httpStatus, 429)
   assert.equal(payload.keys.TAVILY_API_KEY_2.state, 'ok')
@@ -209,7 +212,7 @@ await withStubFetch(async (_url, init) => {
   // A replaced key is unverified until it is used again.
   const onReferenceUpdated = registration.listeners.get('credentials/reference-updated')
   onReferenceUpdated('TAVILY_API_KEY_2')
-  const cleared = await route.resource().json()
+  const cleared = await (await route.resource()).json()
   assert.equal(cleared.keys.TAVILY_API_KEY_2, undefined)
 }
 
@@ -226,7 +229,7 @@ await withStubFetch(async (_url, init) => {
     await duplicate.provider.search({ query: 'q' })
   })
   assert.equal(attempts, 1)
-  const payload = await duplicate.routes[0].resource().json()
+  const payload = await (await duplicate.routes[0].resource()).json()
   assert.equal(payload.keys.TAVILY_API_KEY.state, 'ok')
   assert.equal(payload.keys.TAVILY_API_KEY_2.state, 'ok')
 }

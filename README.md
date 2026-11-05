@@ -58,8 +58,12 @@ up to eight keys (references `TAVILY_API_KEY` and `TAVILY_API_KEY_2` …
   stored key. A key that comes from the environment is read-only here — delete
   or change the variable instead.
 - A saved key reaches the next search without restarting the Host. The key field
-  is a masked text field, not a password input, so browser password managers do
+  is a plain text field (not a password input), so browser password managers do
   not offer to autofill or save it.
+- After a save the card shows the value you just typed under "Last saved in this
+  page". That copy is page-local and disappears on reload. Stored keys cannot be
+  read back afterwards: the credential API never returns a stored value, so the
+  card shows configuration state and runtime health instead.
 
 ### Runtime key status
 
@@ -78,6 +82,8 @@ every five seconds while it is open. The route carries no key values.
 Status resets when the reference's value changes and when the Host restarts;
 when the route is unreachable the card says so and omits the runtime badge. Two
 references holding the same key count as one attempt and report the same status.
+The same payload carries each reference's configuration state, so the list still
+renders when the client's credential `describe` call is unavailable.
 
 ### Environment
 

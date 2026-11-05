@@ -443,12 +443,27 @@ export function apply(ctx, config) {
     ctx.effect(() => server.register({
       kind: 'exact',
       path: STATUS_PATH,
-      resource: () => new Response(JSON.stringify({
-        generatedAt: new Date().toISOString(),
-        keys: Object.fromEntries(ring.status),
-      }), {
-        headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
-      }),
+      resource: async () => {
+        const credentials = typeof ctx.get === 'function' ? ctx.get('credentials') : undefined
+        const refs = {}
+        if (credentials !== undefined) {
+          await Promise.all(options.keyRefs.map(async (reference) => {
+            const info = await credentials.describe(reference)
+            refs[reference] = {
+              configured: info.configured,
+              writable: info.writable,
+              ...info.source === undefined ? {} : { source: info.source },
+            }
+          }))
+        }
+        return new Response(JSON.stringify({
+          generatedAt: new Date().toISOString(),
+          keys: Object.fromEntries(ring.status),
+          refs,
+        }), {
+          headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+        })
+      },
     }), 'tavily-websearch: key status route')
   }
   if (typeof ctx.on === 'function') {

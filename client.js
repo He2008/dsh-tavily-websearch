@@ -45,6 +45,7 @@ window.__ModuleLoader__.load({
         stateUnknown: 'Not used yet',
         statusUnavailable: 'Runtime key status is unavailable; results below come from the last network attempt only.',
         saved: 'Key saved.',
+        lastSaved: 'Last saved in this page: {reference} = {value} (page-local only; a reload hides it again)',
         removed: 'Key deleted.',
         saveFailed: 'Could not save the key: {error}',
         notPersisted: 'The key was accepted but the credential store still reports {reference} as unset. Try Refresh.',
@@ -83,6 +84,7 @@ window.__ModuleLoader__.load({
         stateUnknown: '未使用',
         statusUnavailable: '运行时 Key 状态不可用；下方显示的是上一次网络请求的结果。',
         saved: 'Key 已保存。',
+        lastSaved: '本次页面内最后保存：{reference} = {value}（仅当前页面可见，刷新后不再显示）',
         removed: 'Key 已删除。',
         saveFailed: '保存失败：{error}',
         notPersisted: 'Key 已被接受，但凭据库仍显示 {reference} 未配置。请点“刷新”重试。',
@@ -145,7 +147,6 @@ window.__ModuleLoader__.load({
       input: {
         flex: 1, minWidth: 0, padding: '6px 8px', font: 'inherit', color: color.text,
         background: color.surface, border: `1px solid ${color.border}`, borderRadius: '6px',
-        WebkitTextSecurity: 'disc',
       },
       button: {
         padding: '5px 10px', font: 'inherit', color: color.text, background: color.surface,
@@ -207,6 +208,7 @@ window.__ModuleLoader__.load({
       const [draft, setDraft] = React.useState('')
       const [saving, setSaving] = React.useState(false)
       const [editing, setEditing] = React.useState(null)
+      const [lastSaved, setLastSaved] = React.useState(null)
       const inputId = React.useId()
       const translate = React.useRef(t)
       translate.current = t
@@ -236,6 +238,20 @@ window.__ModuleLoader__.load({
             ? payload.keys
             : {}
           setHealth({ available: true, keys })
+          const refs = payload !== null && typeof payload === 'object'
+            && typeof payload.refs === 'object' && payload.refs !== null
+            ? payload.refs
+            : undefined
+          if (refs !== undefined) {
+            setEntries(previous => {
+              const merged = { ...(previous ?? {}) }
+              for (const [reference, info] of Object.entries(refs)) {
+                if (info === null || typeof info !== 'object') continue
+                merged[reference] = { ...merged[reference], ...info }
+              }
+              return merged
+            })
+          }
         } catch {
           setHealth(previous => ({ available: false, keys: previous.keys }))
         }
@@ -286,6 +302,7 @@ window.__ModuleLoader__.load({
           const described = await credentials.describe(refs)
           setEntries(described)
           if (described[editing]?.configured === true) {
+            setLastSaved({ reference: editing, value })
             setDraft('')
             setEditing(null)
             setNotice(t('saved'))
@@ -426,6 +443,11 @@ window.__ModuleLoader__.load({
               : t('keysConfigured', { count: configured.length, total: refs.length })),
             React.createElement('div', { style: styles.list }, rows),
             editor,
+            lastSaved === null ? null : React.createElement('p', { style: styles.hint },
+              React.createElement('code', { style: styles.reference }, t('lastSaved', {
+                reference: lastSaved.reference,
+                value: lastSaved.value,
+              }))),
             React.createElement('p', { style: styles.hint }, t('rotation')),
             health.available ? null : React.createElement('p', { style: styles.hint }, t('statusUnavailable')),
             error.length > 0
