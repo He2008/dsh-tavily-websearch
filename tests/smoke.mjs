@@ -28,6 +28,18 @@ function registerProvider(config = {}, environment = {}) {
       listeners.set(event, listener)
       return () => { listeners.delete(event) }
     },
+    inject: (names, callback) => {
+      if (!names.includes('webServer')) return () => {}
+      return callback({
+        webServer,
+        get: (name) => name === 'credentials' ? environment.credentials : undefined,
+        effect: (childCallback) => {
+          const dispose = childCallback()
+          return () => { if (typeof dispose === 'function') dispose() }
+        },
+        on: () => () => {},
+      })
+    },
     effect: (callback) => {
       const dispose = callback()
       return () => { if (typeof dispose === 'function') dispose() }

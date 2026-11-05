@@ -437,34 +437,41 @@ export function apply(ctx, config) {
   })
 
   // The card reads runtime key health from this loopback route. It carries no
-  // key values, only reference names and the last attempt's outcome.
-  const server = typeof ctx.get === 'function' ? ctx.get('webServer') : undefined
-  if (server !== undefined) {
-    ctx.effect(() => server.register({
-      kind: 'exact',
-      path: STATUS_PATH,
-      resource: async () => {
-        const credentials = typeof ctx.get === 'function' ? ctx.get('credentials') : undefined
-        const refs = {}
-        if (credentials !== undefined) {
-          await Promise.all(options.keyRefs.map(async (reference) => {
-            const info = await credentials.describe(reference)
-            refs[reference] = {
-              configured: info.configured,
-              writable: info.writable,
-              ...info.source === undefined ? {} : { source: info.source },
-            }
-          }))
-        }
-        return new Response(JSON.stringify({
-          generatedAt: new Date().toISOString(),
-          keys: Object.fromEntries(ring.status),
-          refs,
-        }), {
-          headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
-        })
-      },
-    }), 'tavily-websearch: key status route')
+  // key values, only reference names and the last attempt's outcome. Wait for
+  // the webserver instead of reading it once: a patch reload may apply this
+  // row before the HTTP transport exists.
+  if (typeof ctx.inject === 'function') {
+    ctx.inject(['webServer'], (host) => {
+      host.effect(() => host.webServer.register({
+        kind: 'exact',
+        path: STATUS_PATH,
+        resource: async () => {
+          const credentials = typeof host.get === 'function' ? host.get('credentials') : undefined
+          const refs = {}
+          if (credentials !== undefined) {
+            await Promise.all(options.keyRefs.map(async (reference) => {
+              const [info, resolved] = await Promise.all([
+                credentials.describe(reference),
+                credentials.resolve(reference),
+              ])
+              refs[reference] = {
+                configured: info.configured,
+                writable: info.writable,
+                ...info.source === undefined ? {} : { source: info.source },
+                ...resolved === undefined ? {} : { hint: resolved.value.slice(-4) },
+              }
+            }))
+          }
+          return new Response(JSON.stringify({
+            generatedAt: new Date().toISOString(),
+            keys: Object.fromEntries(ring.status),
+            refs,
+          }), {
+            headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+          })
+        },
+      }), 'tavily-websearch: key status route')
+    })
   }
   if (typeof ctx.on === 'function') {
     // A replaced key starts unverified rather than inheriting the old key's health.

@@ -51,9 +51,9 @@ The **Tavily API keys** card appears on the bundle's own page (Plugins →
 `TAVILY_API_KEY_8`). Keys are written to the DSH credential store through the
 `credentials` Remote namespace:
 
-- The card lists all eight slots with their reference, configuration state,
-  supplying layer, and last network outcome (see below); the credential API
-  never returns stored values.
+- The card lists all eight slots with their reference, the key's last four
+  characters, configuration state, supplying layer, and last network outcome
+  (see below); the credential API never returns full stored values.
 - **Add** fills a free slot, **Replace** overwrites one, and **Delete** clears a
   stored key. A key that comes from the environment is read-only here — delete
   or change the variable instead.

@@ -362,6 +362,9 @@ window.__ModuleLoader__.load({
         return React.createElement('div', { key: reference, style: styles.row },
           React.createElement('span', { style: styles.keyLabel }, t('keyLabel', { index: index + 1 })),
           React.createElement('code', { style: styles.reference }, reference),
+          isConfigured && typeof entry.hint === 'string'
+            ? React.createElement('span', { style: styles.reference }, `…${entry.hint}`)
+            : null,
           React.createElement('span', { style: isConfigured ? styles.badgeSuccess : styles.badge },
             isConfigured ? t('configured') : t('empty')),
           isConfigured && health.available
