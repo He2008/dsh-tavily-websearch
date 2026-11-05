@@ -275,7 +275,9 @@ window.__ModuleLoader__.load({
           ? t('summaryKeyless')
           : t('summary', { count: configured.length, total: refs.length, usable }))
       }
-      if (view !== 'page') return null
+      // A host that omits `view` still renders the page body; only a declared
+      // non-page view is skipped.
+      if (view !== undefined && view !== 'page') return null
 
       const disabled = saving
 
