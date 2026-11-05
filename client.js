@@ -17,6 +17,8 @@ window.__ModuleLoader__.load({
     const messages = {
       en: {
         title: 'Tavily API keys',
+        summary: 'Tavily API keys: {count} of {total} configured, {usable} usable',
+        summaryKeyless: 'Tavily API keys: using keyless mode',
         description: 'Add one or more Tavily keys to use your account limits. Keys are stored in the DSH credential store and never shown again.',
         loading: 'Reading configured keys…',
         refresh: 'Refresh',
@@ -56,6 +58,8 @@ window.__ModuleLoader__.load({
       },
       zh: {
         title: 'Tavily API Key',
+        summary: 'Tavily API Key：已配置 {count}/{total}，可用 {usable}',
+        summaryKeyless: 'Tavily API Key：当前使用免密钥模式',
         description: '添加一个或多个 Tavily Key 以使用账户额度。Key 保存在 DSH 凭据库中，保存后不再显示。',
         loading: '正在读取已配置的 Key…',
         refresh: '刷新',
@@ -264,9 +268,15 @@ window.__ModuleLoader__.load({
         return () => { clearInterval(timer) }
       }, [refreshHealth])
 
+      const configured = refs.filter(reference => entries?.[reference]?.configured === true)
+      if (view === 'summary') {
+        const usable = configured.filter(reference => health.keys[reference]?.state === 'ok').length
+        return React.createElement('span', { style: styles.hint }, configured.length === 0
+          ? t('summaryKeyless')
+          : t('summary', { count: configured.length, total: refs.length, usable }))
+      }
       if (view !== 'page') return null
 
-      const configured = refs.filter(reference => entries?.[reference]?.configured === true)
       const disabled = saving
 
       const startEdit = (reference) => {
@@ -471,12 +481,22 @@ window.__ModuleLoader__.load({
        */
       apply(ctx) {
         ctx.effect(() => ctx.locale.register(NS, messages), 'tavily-websearch: dictionaries')
+        const t = ctx.locale.bind(NS)
+        const inject = () => ({ credentials: ctx.remote?.credentials, refs: KEY_REFS })
         ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
           name: 'plugins.bundle.config',
           key: 'dsh-tavily-websearch',
           order: 0,
           locale: NS,
-          inject: () => ({ credentials: ctx.remote?.credentials, refs: KEY_REFS }),
+          inject,
+        }, TavilyConfigCard))
+        ctx.slots.inject('plugins.item', () => ctx.slots.register({
+          name: 'plugins.item',
+          id: 'tavily-websearch',
+          order: 30,
+          label: () => t('title'),
+          locale: NS,
+          inject,
         }, TavilyConfigCard))
       },
     }
