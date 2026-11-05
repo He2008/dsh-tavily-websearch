@@ -1,6 +1,7 @@
 {
   "meta": {
     "title": "Tavily web search",
-    "description": "Serves web_search through Tavily, using keyless access or a Tavily API key."
+    "description": "Serves web_search through Tavily, using keyless access or a Tavily API key.",
+    "detail": "DETAIL.md"
   }
 }

@@ -4,6 +4,10 @@ A DeepSeek Harness plugin bundle that registers a Tavily search provider on
 `ctx.web`, so the shipped `web_search` tool is served by Tavily with unchanged
 tool schema, source cards, and error reporting.
 
+The plugin page inside DSH shows [DETAIL.md](DETAIL.md) (and
+[DETAIL.zh.md](DETAIL.zh.md) for Chinese). This README covers installation and
+development.
+
 ## Install
 
 Through Plugin Manager, pointing at the repository:
