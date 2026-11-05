@@ -209,17 +209,23 @@ function failureMessage(status, text, payload, retryAfter) {
  * a key saved from the settings card reaches the next search without a restart.
  * @param {object} ctx - plugin context; the optional credentials service supplies stored and ambient values.
  * @param {object} options - resolved provider options.
- * @returns {Promise<Array<{ value: string, reference: string }>>} distinct non-empty keys in preference order, each with the reference its status is reported under.
+ * @returns {Promise<Array<{ value: string, reference: string, references: string[] }>>} distinct non-empty keys in preference order, each with every reference that resolves to it.
  */
 async function resolveKeys(ctx, options) {
   const entries = []
-  const seen = new Set()
+  const byValue = new Map()
   const add = (value, reference) => {
     if (typeof value !== 'string') return
     const trimmed = value.trim()
-    if (trimmed.length === 0 || seen.has(trimmed)) return
-    seen.add(trimmed)
-    entries.push({ value: trimmed, reference })
+    if (trimmed.length === 0) return
+    const existing = byValue.get(trimmed)
+    if (existing !== undefined) {
+      existing.references.push(reference)
+      return
+    }
+    const entry = { value: trimmed, reference, references: [reference] }
+    byValue.set(trimmed, entry)
+    entries.push(entry)
   }
   add(options.apiKey, 'apiKey')
   options.apiKeys.forEach((key, index) => add(key, `apiKeys[${index}]`))
@@ -360,28 +366,31 @@ async function searchTavily(ctx, options, ring, request, signal, warn) {
   const entries = await resolveKeys(ctx, options)
   const usable = entries.filter(entry => !ring.dead.has(entry.value))
   const failures = []
-  const record = (reference, state, httpStatus) => {
-    ring.status.set(reference, {
-      state,
-      at: new Date().toISOString(),
-      ...httpStatus === undefined ? {} : { httpStatus },
-    })
+  const record = (references, state, httpStatus) => {
+    const at = new Date().toISOString()
+    for (const reference of references) {
+      ring.status.set(reference, {
+        state,
+        at,
+        ...httpStatus === undefined ? {} : { httpStatus },
+      })
+    }
   }
 
   for (const [position, entry] of rotated(usable, ring.cursor).entries()) {
     if (signal?.aborted === true) throw webError('Tavily search was cancelled', 'WEB_ABORTED')
     try {
       const result = await requestTavily(options, request, signal, entry.value)
-      record(entry.reference, 'ok')
+      record(entry.references, 'ok')
       ring.cursor = usable.length === 0 ? 0 : (ring.cursor + position + 1) % usable.length
       return result
     } catch (error) {
       if (error.code === 'WEB_ABORTED') throw error
       if (!isKeyFailure(error)) {
-        record(entry.reference, 'error', error.status)
+        record(entry.references, 'error', error.status)
         throw error
       }
-      record(entry.reference, error.status === 401 || error.status === 403 ? 'invalid' : 'rate_limited', error.status)
+      record(entry.references, error.status === 401 || error.status === 403 ? 'invalid' : 'rate_limited', error.status)
       failures.push(error)
       if (error.status === 401 || error.status === 403) ring.dead.add(entry.value)
     }

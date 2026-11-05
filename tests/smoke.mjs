@@ -213,6 +213,24 @@ await withStubFetch(async (_url, init) => {
   assert.equal(cleared.keys.TAVILY_API_KEY_2, undefined)
 }
 
+// Two references holding the same key share one attempt and both report its health.
+{
+  const duplicate = registerProvider({}, {
+    credentials: credentialsOf({ TAVILY_API_KEY: 'same-key', TAVILY_API_KEY_2: 'same-key' }),
+  })
+  let attempts = 0
+  await withStubFetch(async () => {
+    attempts += 1
+    return stubJson(200, { results: [] })()
+  }, async () => {
+    await duplicate.provider.search({ query: 'q' })
+  })
+  assert.equal(attempts, 1)
+  const payload = await duplicate.routes[0].resource().json()
+  assert.equal(payload.keys.TAVILY_API_KEY.state, 'ok')
+  assert.equal(payload.keys.TAVILY_API_KEY_2.state, 'ok')
+}
+
 // A rejected key (401) is remembered and not retried on the next search.
 {
   const calls = []

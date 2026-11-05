@@ -76,7 +76,8 @@ every five seconds while it is open. The route carries no key values.
 | **Not used yet** | No search has used this key since the Host started, or the key was just replaced. |
 
 Status resets when the reference's value changes and when the Host restarts;
-when the route is unreachable the card says so and omits the runtime badge.
+when the route is unreachable the card says so and omits the runtime badge. Two
+references holding the same key count as one attempt and report the same status.
 
 ### Environment
 
