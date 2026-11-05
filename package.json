@@ -1,6 +1,6 @@
 {
   "name": "dsh-tavily-websearch",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "private": true,
   "type": "module",
   "description": "Tavily-backed search provider for the DeepSeek Harness web_search tool, with multi-key rotation and a settings card.",

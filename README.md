@@ -47,7 +47,7 @@ more keys from https://app.tavily.com.
 ### Settings card
 
 The **Tavily API keys** card appears on the bundle's own page (Plugins →
-**Tavily web search**) and in Settings → Plugins. It manages up to eight keys (references `TAVILY_API_KEY` and `TAVILY_API_KEY_2` …
+**Tavily web search**). It manages up to eight keys (references `TAVILY_API_KEY` and `TAVILY_API_KEY_2` …
 `TAVILY_API_KEY_8`). Keys are written to the DSH credential store through the
 `credentials` Remote namespace:
 

@@ -486,22 +486,12 @@ window.__ModuleLoader__.load({
        */
       apply(ctx) {
         ctx.effect(() => ctx.locale.register(NS, messages), 'tavily-websearch: dictionaries')
-        const t = ctx.locale.bind(NS)
-        const inject = () => ({ credentials: ctx.remote?.credentials, refs: KEY_REFS })
         ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
           name: 'plugins.bundle.config',
           key: 'dsh-tavily-websearch',
           order: 0,
           locale: NS,
-          inject,
-        }, TavilyConfigCard))
-        ctx.slots.inject('plugins.item', () => ctx.slots.register({
-          name: 'plugins.item',
-          id: 'tavily-websearch',
-          order: 30,
-          label: () => t('title'),
-          locale: NS,
-          inject,
+          inject: () => ({ credentials: ctx.remote?.credentials, refs: KEY_REFS }),
         }, TavilyConfigCard))
       },
     }
