@@ -2,6 +2,7 @@ window.__ModuleLoader__.load({
   id: 'dsh-tavily-websearch',
   factory(require) {
     const React = require('react')
+    const ReactDOM = require('react-dom')
 
     /** Locale namespace owned by this bundle's configuration card. */
     const NS = 'tavily-websearch'
@@ -37,6 +38,9 @@ window.__ModuleLoader__.load({
         cancel: 'Cancel',
         remove: 'Delete',
         editing: 'Setting key {index} ({reference})',
+        addTitle: 'Add key {index}',
+        replaceTitle: 'Replace key {index}',
+        modalHint: 'Paste the Tavily key. It is stored in the DSH credential store; the full value is shown again only for this page.',
         placeholder: 'Paste a Tavily key, e.g. tvly-…',
         rotation: 'Searches rotate across keys; a rejected or rate-limited key is skipped. If every key fails, keyless mode is used when enabled.',
         envManaged: 'This key comes from the environment; delete the variable instead.',
@@ -78,6 +82,9 @@ window.__ModuleLoader__.load({
         cancel: '取消',
         remove: '删除',
         editing: '正在设置 Key {index}（{reference}）',
+        addTitle: '添加 Key {index}',
+        replaceTitle: '替换 Key {index}',
+        modalHint: '粘贴 Tavily Key。它会写入 DSH 凭据库；完整值仅在当前页面内再次显示。',
         placeholder: '粘贴 Tavily Key，例如 tvly-…',
         rotation: '搜索会在多个 Key 之间轮换，被拒绝或限流的 Key 会被跳过。全部失败时，如已启用则回退到免密钥模式。',
         envManaged: '该 Key 来自环境变量，请删除对应的环境变量。',
@@ -146,10 +153,20 @@ window.__ModuleLoader__.load({
       },
       source: { color: color.muted, fontSize: '11px', whiteSpace: 'nowrap' },
       spacer: { flex: 1 },
-      editor: { display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' },
-      editorRow: { display: 'flex', alignItems: 'center', gap: '8px' },
+      overlay: {
+        position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center',
+        justifyContent: 'center', padding: '16px', background: 'rgba(0, 0, 0, 0.38)',
+      },
+      dialog: {
+        width: 'min(440px, 100%)', maxHeight: 'calc(100vh - 32px)', overflowY: 'auto', boxSizing: 'border-box',
+        display: 'flex', flexDirection: 'column', gap: '10px', padding: '16px', borderRadius: '10px',
+        border: `1px solid ${color.border}`, background: 'var(--dsw-alias-bg-overlay, #fff)',
+        color: color.text, boxShadow: '0 16px 40px rgba(0, 0, 0, 0.28)',
+      },
+      dialogTitle: { margin: 0, fontSize: '14px', fontWeight: 600 },
+      dialogActions: { display: 'flex', justifyContent: 'flex-end', gap: '8px' },
       input: {
-        flex: 1, minWidth: 0, padding: '6px 8px', font: 'inherit', color: color.text,
+        width: '100%', boxSizing: 'border-box', padding: '6px 8px', font: 'inherit', color: color.text,
         background: color.surface, border: `1px solid ${color.border}`, borderRadius: '6px',
       },
       button: {
@@ -214,6 +231,8 @@ window.__ModuleLoader__.load({
       const [editing, setEditing] = React.useState(null)
       const [lastSaved, setLastSaved] = React.useState(null)
       const inputId = React.useId()
+      const titleId = React.useId()
+      const inputRef = React.useRef(null)
       const translate = React.useRef(t)
       translate.current = t
 
@@ -261,6 +280,7 @@ window.__ModuleLoader__.load({
         }
       }, [])
 
+      React.useEffect(() => { if (editing !== null) inputRef.current?.focus() }, [editing])
       React.useEffect(() => { void refresh() }, [refresh])
       React.useEffect(() => {
         void refreshHealth()
@@ -399,48 +419,73 @@ window.__ModuleLoader__.load({
         )
       })
 
-      const editor = editing === null ? null : React.createElement('div', { style: styles.editor },
-        React.createElement('p', { style: styles.hint },
-          t('editing', { index: refs.indexOf(editing) + 1, reference: editing })),
-        React.createElement('div', { style: styles.editorRow },
-          React.createElement('input', {
-            id: inputId,
-            type: 'text',
-            style: styles.input,
-            value: draft,
-            placeholder: t('placeholder'),
-            'aria-label': t('keyLabel', { index: refs.indexOf(editing) + 1 }),
-            autoComplete: 'off',
-            autoCorrect: 'off',
-            autoCapitalize: 'none',
-            spellCheck: false,
-            'data-1p-ignore': 'true',
-            'data-lpignore': 'true',
-            'data-form-type': 'other',
-            disabled,
-            onChange: event => setDraft(event.target.value),
-            onKeyDown: (event) => {
-              if (event.key !== 'Enter') return
-              event.preventDefault()
-              void submit()
-            },
-          }),
-          React.createElement('button', {
-            type: 'button',
-            style: draft.trim().length === 0 || disabled ? { ...styles.primary, ...styles.disabled } : styles.primary,
-            disabled: disabled || draft.trim().length === 0,
-            onClick: () => { void submit() },
-          }, t('save')),
-          React.createElement('button', {
-            type: 'button',
-            style: styles.button,
-            disabled,
-            onClick: cancelEdit,
-          }, t('cancel')),
+      const modal = editing === null || typeof document === 'undefined' ? null : ReactDOM.createPortal(
+        React.createElement('div', {
+          style: styles.overlay,
+          onMouseDown: (event) => { if (event.target === event.currentTarget) cancelEdit() },
+          onKeyDown: (event) => {
+            if (event.key !== 'Escape') return
+            event.preventDefault()
+            cancelEdit()
+          },
+        },
+          React.createElement('div', {
+            role: 'dialog',
+            'aria-modal': 'true',
+            'aria-labelledby': titleId,
+            style: styles.dialog,
+          },
+            React.createElement('h3', { id: titleId, style: styles.dialogTitle },
+              entries?.[editing]?.configured === true
+                ? t('replaceTitle', { index: refs.indexOf(editing) + 1 })
+                : t('addTitle', { index: refs.indexOf(editing) + 1 })),
+            React.createElement('p', { style: styles.hint }, t('modalHint')),
+            React.createElement('input', {
+              id: inputId,
+              ref: inputRef,
+              type: 'text',
+              style: styles.input,
+              value: draft,
+              placeholder: t('placeholder'),
+              'aria-label': t('keyLabel', { index: refs.indexOf(editing) + 1 }),
+              autoComplete: 'off',
+              autoCorrect: 'off',
+              autoCapitalize: 'none',
+              spellCheck: false,
+              'data-1p-ignore': 'true',
+              'data-lpignore': 'true',
+              'data-form-type': 'other',
+              disabled,
+              onChange: event => setDraft(event.target.value),
+              onKeyDown: (event) => {
+                if (event.key !== 'Enter') return
+                event.preventDefault()
+                void submit()
+              },
+            }),
+            error.length > 0
+              ? React.createElement('p', { role: 'status', style: styles.error }, error)
+              : null,
+            React.createElement('div', { style: styles.dialogActions },
+              React.createElement('button', {
+                type: 'button',
+                style: styles.button,
+                disabled,
+                onClick: cancelEdit,
+              }, t('cancel')),
+              React.createElement('button', {
+                type: 'button',
+                style: draft.trim().length === 0 || disabled ? { ...styles.primary, ...styles.disabled } : styles.primary,
+                disabled: disabled || draft.trim().length === 0,
+                onClick: () => { void submit() },
+              }, t('save')),
+            ),
+          ),
         ),
+        document.body,
       )
 
-      return React.createElement('div', { style: styles.root },
+      const card = React.createElement('div', { style: styles.root },
         React.createElement('div', { style: styles.header },
           React.createElement('h4', { style: styles.heading }, t('title')),
           React.createElement('span', { style: styles.spacer }),
@@ -457,7 +502,6 @@ window.__ModuleLoader__.load({
               ? t('keyless')
               : t('keysConfigured', { count: configured.length, total: refs.length })),
             React.createElement('div', { style: styles.list }, rows),
-            editor,
             lastSaved === null ? null : React.createElement('p', { style: styles.hint },
               React.createElement('code', { style: styles.reference }, t('lastSaved', {
                 reference: lastSaved.reference,
@@ -476,6 +520,7 @@ window.__ModuleLoader__.load({
                 : null,
           ),
       )
+      return React.createElement(React.Fragment, null, card, modal)
     }
 
     return {

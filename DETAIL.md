@@ -9,8 +9,9 @@ Open **Plugins → Tavily web search** and use the **Tavily API keys** card.
 
 - Eight numbered slots map to `TAVILY_API_KEY`, `TAVILY_API_KEY_2` …
   `TAVILY_API_KEY_8`.
-- **Add**, **Replace**, and **Delete** write to the DSH credential store; a key
-  saved here reaches the next search without restarting the Host.
+- **Add** and **Replace** open a dialog for the key; **Delete** clears a stored
+  key. Writes go to the DSH credential store and reach the next search without
+  restarting the Host.
 - Keys supplied by the environment are read-only in the card.
 - With no key, searches use Tavily's rate-limited keyless mode.
 

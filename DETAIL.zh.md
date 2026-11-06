@@ -7,7 +7,7 @@
 打开 **Plugins → Tavily 网页搜索**，使用 **Tavily API Key** 卡片。
 
 - 8 个编号槽位对应 `TAVILY_API_KEY`、`TAVILY_API_KEY_2` … `TAVILY_API_KEY_8`。
-- **添加 / 替换 / 删除** 写入 DSH 凭据库；保存后下一次搜索立即生效，无需重启。
+- **添加 / 替换** 会打开弹窗输入 Key，**删除** 清除已保存的 Key；写入 DSH 凭据库，保存后下一次搜索立即生效，无需重启。
 - 来自环境变量的 Key 在卡片中只读。
 - 没有 Key 时使用 Tavily 免密钥模式（有限速）。
 
